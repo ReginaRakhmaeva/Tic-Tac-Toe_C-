@@ -1,0 +1,57 @@
+using Tic_Tac_Toe.domain.model;
+using Tic_Tac_Toe.domain.service;
+using Tic_Tac_Toe.datasource.repository;
+
+namespace Tic_Tac_Toe.datasource.service;
+
+/// Класс, реализующий интерфейс IGameService и принимающий в качестве параметра интерфейс репозитория
+public class GameServiceDataSource : IGameService
+{
+    private readonly IGameRepository _repository;
+    private readonly GameService _domainService;
+
+    /// Конструктор, принимающий интерфейс репозитория
+    public GameServiceDataSource(IGameRepository repository)
+    {
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _domainService = new GameService();
+    }
+
+    /// Получение следующего хода текущей игры алгоритмом Минимакс
+    public Move GetNextMove(Game game)
+    {
+        if (game == null)
+        {
+            throw new ArgumentNullException(nameof(game));
+        }
+
+        var move = _domainService.GetNextMove(game);
+        
+        _repository.Save(game);
+        
+        return move;
+    }
+
+    /// Валидация игрового поля текущей игры (проверка, что не изменены предыдущие ходы)
+    public bool ValidateBoard(Game game)
+    {
+        if (game == null)
+        {
+            throw new ArgumentNullException(nameof(game));
+        }
+
+        return _domainService.ValidateBoard(game);
+    }
+
+    /// Проверка окончания игры
+    public GameStatus CheckGameEnd(Game game)
+    {
+        if (game == null)
+        {
+            throw new ArgumentNullException(nameof(game));
+        }
+
+        return _domainService.CheckGameEnd(game);
+    }
+}
+
