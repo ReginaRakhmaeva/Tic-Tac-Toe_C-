@@ -1,10 +1,49 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Tic-Tac-Toe Game";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+@section Styles {
+    <link rel="stylesheet" href="~/css/game.css" asp-append-version="true" />
+}
+
+<div class="container text-center">
+    <h1 class="display-4 mb-4">Крестики-Нолики</h1>
+    
+    <div class="game-container">
+        <div class="game-info mb-3">
+            <p id="gameStatus" class="lead">Ваш ход (X)</p>
+            <p id="gameId" class="text-muted small" style="display: none;"></p>
+        </div>
+
+        <div class="game-board mb-4" id="gameBoard">
+            <div class="row g-0">
+                <div class="col-4 cell" data-row="0" data-col="0"></div>
+                <div class="col-4 cell" data-row="0" data-col="1"></div>
+                <div class="col-4 cell" data-row="0" data-col="2"></div>
+            </div>
+            <div class="row g-0">
+                <div class="col-4 cell" data-row="1" data-col="0"></div>
+                <div class="col-4 cell" data-row="1" data-col="1"></div>
+                <div class="col-4 cell" data-row="1" data-col="2"></div>
+            </div>
+            <div class="row g-0">
+                <div class="col-4 cell" data-row="2" data-col="0"></div>
+                <div class="col-4 cell" data-row="2" data-col="1"></div>
+                <div class="col-4 cell" data-row="2" data-col="2"></div>
+            </div>
+        </div>
+
+        <div class="game-controls">
+            <button id="startFirstBtn" class="btn btn-primary btn-lg me-2">Начинает игрок</button>
+            <button id="startSecondBtn" class="btn btn-success btn-lg me-2">Начинает компьютер</button>
+        </div>
+
+        <div id="errorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
+    </div>
 </div>
+
+@section Scripts {
+    <script src="~/js/game.js" asp-append-version="true"></script>
+}
