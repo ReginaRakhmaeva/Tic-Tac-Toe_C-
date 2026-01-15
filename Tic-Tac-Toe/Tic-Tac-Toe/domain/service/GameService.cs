@@ -29,43 +29,50 @@ public class GameService : IGameService
     private Move Minimax(GameBoard board, int maximizingPlayer, int minimizingPlayer)
     {
         int bestScore = int.MinValue;
-        Move bestMove = null!;
+        List<Move> bestMoves = new List<Move>();
 
-        // Перебираем все возможные ходы
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
                 if (board.IsEmpty(i, j))
                 {
-                    // Делаем ход
                     board[i, j] = maximizingPlayer;
 
-                    // Оцениваем этот ход
                     int score = MinimaxRecursive(board, 0, false, maximizingPlayer, minimizingPlayer);
 
-                    // Отменяем ход
                     board[i, j] = GameBoard.Empty;
 
-                    // Обновляем лучший ход
                     if (score > bestScore)
                     {
                         bestScore = score;
-                        bestMove = new Move(i, j, maximizingPlayer);
+                        bestMoves.Clear();
+                        bestMoves.Add(new Move(i, j, maximizingPlayer));
+                    }
+                    else if (score == bestScore)
+                    {
+                        // Если оценка равна лучшей, добавляем в список для случайного выбора
+                        bestMoves.Add(new Move(i, j, maximizingPlayer));
                     }
                 }
             }
         }
 
-        return bestMove ?? new Move(0, 0, maximizingPlayer);
+        // Если есть несколько ходов с одинаковой оценкой, выбираем случайный
+        if (bestMoves.Count > 0)
+        {
+            Random random = new Random();
+            return bestMoves[random.Next(bestMoves.Count)];
+        }
+
+        return new Move(0, 0, maximizingPlayer);
     }
 
     
     /// Рекурсивная функция алгоритма Минимакс
     private int MinimaxRecursive(GameBoard board, int depth, bool isMaximizing, int maximizingPlayer, int minimizingPlayer)
     {
-        // Проверяем состояние игры
-        var status = EvaluateBoard(board, maximizingPlayer, minimizingPlayer);
+        var status = EvaluateBoard(board);
 
         if (status == GameStatus.PlayerXWins)
         {
@@ -83,12 +90,14 @@ public class GameService : IGameService
         if (isMaximizing)
         {
             int bestScore = int.MinValue;
+            bool hasMoves = false;
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
                 {
                     if (board.IsEmpty(i, j))
                     {
+                        hasMoves = true;
                         board[i, j] = maximizingPlayer;
                         int score = MinimaxRecursive(board, depth + 1, false, maximizingPlayer, minimizingPlayer);
                         board[i, j] = GameBoard.Empty;
@@ -96,17 +105,19 @@ public class GameService : IGameService
                     }
                 }
             }
-            return bestScore;
+            return hasMoves ? bestScore : 0;
         }
         else
         {
             int bestScore = int.MaxValue;
+            bool hasMoves = false;
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
                 {
                     if (board.IsEmpty(i, j))
                     {
+                        hasMoves = true;
                         board[i, j] = minimizingPlayer;
                         int score = MinimaxRecursive(board, depth + 1, true, maximizingPlayer, minimizingPlayer);
                         board[i, j] = GameBoard.Empty;
@@ -114,7 +125,7 @@ public class GameService : IGameService
                     }
                 }
             }
-            return bestScore;
+            return hasMoves ? bestScore : 0;
         }
     }
 
@@ -129,11 +140,9 @@ public class GameService : IGameService
 
         if (game.MoveHistory == null || game.MoveHistory.Count == 0)
         {
-            // Если нет истории ходов, проверяем, что поле пустое или содержит только валидные значения
             return IsBoardValid(game.Board);
         }
 
-        // Восстанавливаем поле из истории ходов
         var reconstructedBoard = new GameBoard();
         foreach (var move in game.MoveHistory)
         {
@@ -143,19 +152,16 @@ public class GameService : IGameService
             }
             else
             {
-                // Ход в уже занятую клетку - невалидно
                 return false;
             }
         }
 
-        // Сравниваем восстановленное поле с текущим
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
                 if (reconstructedBoard[i, j] != game.Board[i, j])
                 {
-                    // Поле было изменено - невалидно
                     return false;
                 }
             }
@@ -191,45 +197,39 @@ public class GameService : IGameService
             throw new ArgumentNullException(nameof(game));
         }
 
-        return EvaluateBoard(game.Board, GameBoard.PlayerX, GameBoard.PlayerO);
+        return EvaluateBoard(game.Board);
     }
 
     
     /// Оценка состояния игрового поля
-    private GameStatus EvaluateBoard(GameBoard board, int playerX, int playerO)
+    private GameStatus EvaluateBoard(GameBoard board)
     {
-        // Проверяем победу по строкам
         for (int i = 0; i < 3; i++)
         {
             if (board[i, 0] == board[i, 1] && board[i, 1] == board[i, 2] && board[i, 0] != GameBoard.Empty)
             {
-                return board[i, 0] == playerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
+                return board[i, 0] == GameBoard.PlayerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
             }
         }
 
-        // Проверяем победу по столбцам
         for (int j = 0; j < 3; j++)
         {
             if (board[0, j] == board[1, j] && board[1, j] == board[2, j] && board[0, j] != GameBoard.Empty)
             {
-                return board[0, j] == playerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
+                return board[0, j] == GameBoard.PlayerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
             }
-            
         }
 
-        // Проверяем главную диагональ
         if (board[0, 0] == board[1, 1] && board[1, 1] == board[2, 2] && board[0, 0] != GameBoard.Empty)
         {
-            return board[0, 0] == playerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
+            return board[0, 0] == GameBoard.PlayerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
         }
 
-        // Проверяем побочную диагональ
         if (board[0, 2] == board[1, 1] && board[1, 1] == board[2, 0] && board[0, 2] != GameBoard.Empty)
         {
-            return board[0, 2] == playerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
+            return board[0, 2] == GameBoard.PlayerX ? GameStatus.PlayerXWins : GameStatus.PlayerOWins;
         }
 
-        // Проверяем ничью (все клетки заняты)
         bool isFull = true;
         for (int i = 0; i < 3; i++)
         {
