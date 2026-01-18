@@ -200,6 +200,60 @@ public class GameService : IGameService
         return EvaluateBoard(game.Board);
     }
 
+    /// Обработка хода игрока: обновляет доску, определяет ход и добавляет в историю
+    public bool ProcessPlayerMove(Game game, GameBoard newBoard)
+    {
+        if (game == null || game.Board == null || newBoard == null)
+        {
+            return false;
+        }
+
+        GameBoard oldBoard = game.Board.Clone();
+        game.Board = newBoard;
+
+        // Определяем ход игрока, сравнивая старую и новую доску
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                if (oldBoard[i, j] != game.Board[i, j] && game.Board[i, j] == GameBoard.PlayerX)
+                {
+                    if (game.MoveHistory == null)
+                    {
+                        game.MoveHistory = new List<Move>();
+                    }
+                    game.MoveHistory.Add(new Move(i, j, GameBoard.PlayerX));
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// Применение хода компьютера: получает ход, применяет к доске и добавляет в историю
+    public Move MakeComputerMove(Game game)
+    {
+        if (game == null || game.Board == null)
+        {
+            throw new ArgumentNullException(nameof(game));
+        }
+
+        Move computerMove = GetNextMove(game);
+        
+        // Применяем ход к доске
+        game.Board[computerMove.Row, computerMove.Col] = GameBoard.PlayerO;
+        
+        // Добавляем в историю
+        if (game.MoveHistory == null)
+        {
+            game.MoveHistory = new List<Move>();
+        }
+        game.MoveHistory.Add(computerMove);
+        
+        return computerMove;
+    }
+
     
     /// Оценка состояния игрового поля
     private GameStatus EvaluateBoard(GameBoard board)

@@ -1,7 +1,15 @@
+using Tic_Tac_Toe.di;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+
+// Добавляем поддержку API контроллеров
+builder.Services.AddControllers();
+
+// Регистрируем зависимости через Configuration
+Configuration.ConfigureDependencies(builder.Services);
 
 var app = builder.Build();
 
@@ -21,5 +29,6 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapRazorPages();
+app.MapControllers(); // Подключаем API контроллеры
 
 app.Run();

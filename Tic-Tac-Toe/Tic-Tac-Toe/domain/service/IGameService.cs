@@ -16,4 +16,12 @@ public interface IGameService
     
     /// Проверка окончания игры
     GameStatus CheckGameEnd(Game game);
+
+    /// Обработка хода игрока: обновляет доску, определяет ход и добавляет в историю
+    /// Возвращает true, если ход успешно обработан, false если ход не найден или невалиден
+    bool ProcessPlayerMove(Game game, GameBoard newBoard);
+
+    /// Применение хода компьютера: получает ход, применяет к доске и добавляет в историю
+    /// Возвращает выполненный ход
+    Move MakeComputerMove(Game game);
 }

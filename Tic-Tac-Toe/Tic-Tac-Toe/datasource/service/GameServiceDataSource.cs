@@ -53,5 +53,31 @@ public class GameServiceDataSource : IGameService
 
         return _domainService.CheckGameEnd(game);
     }
+
+    /// Обработка хода игрока: обновляет доску, определяет ход и добавляет в историю
+    public bool ProcessPlayerMove(Game game, GameBoard newBoard)
+    {
+        if (game == null || newBoard == null)
+        {
+            return false;
+        }
+
+        return _domainService.ProcessPlayerMove(game, newBoard);
+    }
+
+    /// Применение хода компьютера: получает ход, применяет к доске и добавляет в историю
+    public Move MakeComputerMove(Game game)
+    {
+        if (game == null)
+        {
+            throw new ArgumentNullException(nameof(game));
+        }
+
+        var move = _domainService.MakeComputerMove(game);
+        
+        _repository.Save(game);
+        
+        return move;
+    }
 }
 
