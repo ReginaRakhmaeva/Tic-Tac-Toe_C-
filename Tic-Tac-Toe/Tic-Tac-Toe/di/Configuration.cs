@@ -11,7 +11,7 @@ public static class Configuration
     /// Регистрирует все зависимости для работы с играми
     public static void ConfigureDependencies(IServiceCollection services)
     {
-        services.AddSingleton<GameStorage>();
+        // GameStorage удален - теперь используется Entity Framework Core
 
         services.AddScoped<IGameRepository, GameRepository>();
 

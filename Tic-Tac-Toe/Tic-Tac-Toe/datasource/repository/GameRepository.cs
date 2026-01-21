@@ -3,15 +3,10 @@ using Tic_Tac_Toe.datasource.mapper;
 
 namespace Tic_Tac_Toe.datasource.repository;
 
-/// Реализация репозитория для работы с классом-хранилищем
+/// Реализация репозитория для работы с базой данных
 public class GameRepository : IGameRepository
 {
-    private readonly GameStorage _storage;
-
-    public GameRepository(GameStorage storage)
-    {
-        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-    }
+    // TODO: Будет заменено на DbContext после настройки подключения к PostgreSQL
 
     /// Сохранить текущую игру
     public void Save(Game game)
@@ -21,20 +16,15 @@ public class GameRepository : IGameRepository
             throw new ArgumentNullException(nameof(game));
         }
 
-        var dto = GameMapper.ToDto(game);
-        _storage.Save(dto);
+        // TODO: Реализация через Entity Framework Core
+        throw new NotImplementedException("Реализация через DbContext будет добавлена позже");
     }
 
     /// Получить текущую игру по UUID
     public Game? Get(Guid id)
     {
-        var dto = _storage.Get(id);
-        if (dto == null)
-        {
-            return null;
-        }
-
-        return GameMapper.ToDomain(dto);
+        // TODO: Реализация через Entity Framework Core
+        throw new NotImplementedException("Реализация через DbContext будет добавлена позже");
     }
 }
 
