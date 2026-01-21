@@ -43,29 +43,3 @@ public static class GameMapper
     }
 }
 
-/// Маппер для преобразования Move между domain и datasource слоями
-public static class MoveMapper
-{
-    /// Преобразование из domain в datasource
-    public static MoveDto ToDto(Move domain)
-    {
-        if (domain == null)
-        {
-            throw new ArgumentNullException(nameof(domain));
-        }
-
-        return new MoveDto(domain.Row, domain.Col, domain.Player);
-    }
-
-    /// Преобразование из datasource в domain
-    public static Move ToDomain(MoveDto dto)
-    {
-        if (dto == null)
-        {
-            throw new ArgumentNullException(nameof(dto));
-        }
-
-        return new Move(dto.Row, dto.Col, dto.Player);
-    }
-}
-

@@ -27,27 +27,3 @@ public class Game
         MoveHistory = new List<Move>();
     }
 }
-
-/// Модель хода в игре
-public class Move
-{
-    public int Row { get; set; }
-    public int Col { get; set; }
-    public int Player { get; set; } // 1 - X, 2 - O
-
-    public Move(int row, int col, int player)
-    {
-        Row = row;
-        Col = col;
-        Player = player;
-    }
-}
-
-/// Статус игры
-public enum GameStatus
-{
-    InProgress,  // Игра продолжается
-    PlayerXWins, // Победил игрок X
-    PlayerOWins, // Победил игрок O
-    Draw         // Ничья
-}
