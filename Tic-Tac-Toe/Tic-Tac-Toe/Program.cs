@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Tic_Tac_Toe.datasource.dbcontext;
 using Tic_Tac_Toe.di;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,16 +10,20 @@ builder.Services.AddRazorPages();
 // Добавляем поддержку API контроллеров
 builder.Services.AddControllers();
 
+// Настройка подключения к PostgreSQL
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
 // Регистрируем зависимости через Configuration
 Configuration.ConfigureDependencies(builder.Services);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Настройте конвейер HTTP-запросов
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
