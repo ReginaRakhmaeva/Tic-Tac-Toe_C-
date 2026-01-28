@@ -1,5 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Tic_Tac_Toe.datasource.model;
+using Tic_Tac_Toe.datasource.dbcontext.Converters;
 
 namespace Tic_Tac_Toe.datasource.dbcontext;
 
@@ -21,6 +25,19 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        var gameBoardConverter = new ValueConverter<GameBoardDto, string>(
+            v => GameBoardJsonConverter.Serialize(v),
+            v => GameBoardJsonConverter.Deserialize(v));
+
+        var moveHistoryConverter = new ValueConverter<List<MoveDto>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<List<MoveDto>>(v, (JsonSerializerOptions?)null) ?? new List<MoveDto>());
+
+        var moveHistoryComparer = new ValueComparer<List<MoveDto>>(
+            (c1, c2) => MoveHistoryComparer.Compare(c1, c2),
+            c => MoveHistoryComparer.GetHashCode(c),
+            c => MoveHistoryComparer.Clone(c));
+
         modelBuilder.Entity<UserDto>(entity =>
         {
             entity.ToTable("Users");
@@ -29,7 +46,6 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Login).HasColumnName("login").IsRequired().HasMaxLength(255);
             entity.Property(e => e.Password).HasColumnName("password").IsRequired().HasMaxLength(255);
             
-            // Уникальный индекс на логин
             entity.HasIndex(e => e.Login).IsUnique();
         });
 
@@ -38,8 +54,16 @@ public class ApplicationDbContext : DbContext
             entity.ToTable("Games");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.Board).HasColumnName("board").HasColumnType("jsonb").IsRequired();
-            entity.Property(e => e.MoveHistory).HasColumnName("move_history");
+            entity.Property(e => e.UserId).HasColumnName("user_id").IsRequired();
+            entity.Property(e => e.Board)
+                .HasColumnName("board")
+                .HasColumnType("jsonb")
+                .IsRequired()
+                .HasConversion(gameBoardConverter);
+            entity.Property(e => e.MoveHistory)
+                .HasColumnName("move_history")
+                .HasColumnType("jsonb")
+                .HasConversion(moveHistoryConverter, moveHistoryComparer);
         });
 
         modelBuilder.Entity<MoveDto>(entity =>
