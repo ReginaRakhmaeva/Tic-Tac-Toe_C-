@@ -24,98 +24,117 @@ public class GameController : ControllerBase
     [HttpGet("{id}")]
     public IActionResult GetGame(Guid id, [FromQuery] string firstMove = "player")
     {
-        try
+        if (!TryGetUserId(out var userId))
         {
-            var currentGame = _repository.Get(id);
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var currentGame = _repository.Get(id);
+        
+        if (currentGame == null)
+        {
+            bool computerFirst = (firstMove?.ToLower() == "computer");
+            currentGame = new Game(id, userId, new GameBoard());
             
-            if (currentGame == null)
+            if (computerFirst)
             {
-                bool computerFirst = (firstMove?.ToLower() == "computer");
-                
-                currentGame = new Game { Id = id };
-                
-                if (computerFirst)
-                {
-                    _gameService.MakeComputerMove(currentGame);
-                    _repository.Save(currentGame);
-                }
-                else
-                {
-                    _repository.Save(currentGame);
-                }
+                _gameService.MakeComputerMove(currentGame);
             }
             
-            var gameStatus = _gameService.CheckGameEnd(currentGame);
-            var response = GameMapper.ToResponse(currentGame, gameStatus);
-            return Ok(response);
+            _repository.Save(currentGame);
         }
-        catch (Exception ex)
+        else
         {
-            return StatusCode(500, new ErrorResponse("Internal server error", ex.Message));
+            if (currentGame.UserId != userId)
+            {
+                return Forbid();
+            }
         }
+        
+        var gameStatus = _gameService.CheckGameEnd(currentGame);
+        var response = GameMapper.ToResponse(currentGame, gameStatus);
+        return Ok(response);
     }
 
     [HttpPost("{id}")]
     public IActionResult MakeMove(Guid id, [FromBody] GameRequest request)
     {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        if (request == null)
+        {
+            return BadRequest(new ErrorResponse("Request body is required"));
+        }
+
+        if (request.Id != id)
+        {
+            return BadRequest(new ErrorResponse("Game ID in URL does not match ID in request body"));
+        }
+
+        if (request.Board == null)
+        {
+            return BadRequest(new ErrorResponse("Board is required"));
+        }
+
+        Game gameFromRequest;
         try
         {
-            if (request == null)
+            gameFromRequest = GameMapper.ToDomain(request);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse("Invalid game data", ex.Message));
+        }
+
+        var currentGame = _repository.Get(id);
+        
+        if (currentGame == null)
+        {
+            currentGame = new Game(id, userId, new GameBoard());
+        }
+        else
+        {
+            if (currentGame.UserId != userId)
             {
-                return BadRequest(new ErrorResponse("Request body is required"));
+                return Forbid();
             }
 
-            if (request.Id != id)
-            {
-                return BadRequest(new ErrorResponse("Game ID in URL does not match ID in request body"));
-            }
-
-            if (request.Board == null)
-            {
-                return BadRequest(new ErrorResponse("Board is required"));
-            }
-
-            Game gameFromRequest;
-            try
-            {
-                gameFromRequest = GameMapper.ToDomain(request);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new ErrorResponse("Invalid game data", ex.Message));
-            }
-
-            Game currentGame = _repository.Get(id) ?? new Game { Id = id };
-
-            if (!_gameService.ProcessPlayerMove(currentGame, gameFromRequest.Board))
-            {
-                return BadRequest(new ErrorResponse("Invalid player move: no valid move detected"));
-            }
-
-            if (!_gameService.ValidateBoard(currentGame))
+            if (!_gameService.ValidateBoardBeforeMove(currentGame, gameFromRequest.Board))
             {
                 return BadRequest(new ErrorResponse("Invalid game board: previous moves have been changed"));
             }
-
-            var gameStatus = _gameService.CheckGameEnd(currentGame);
-            if (gameStatus != GameStatus.InProgress)
-            {
-                _repository.Save(currentGame);
-                var gameResponse = GameMapper.ToResponse(currentGame, gameStatus);
-                return Ok(gameResponse);
-            }
-
-            _gameService.MakeComputerMove(currentGame);
-            _repository.Save(currentGame);
-
-            var finalStatus = _gameService.CheckGameEnd(currentGame);
-            var finalResponse = GameMapper.ToResponse(currentGame, finalStatus);
-
-            return Ok(finalResponse);
         }
-        catch (Exception ex)
+
+        if (!_gameService.ProcessPlayerMove(currentGame, gameFromRequest.Board))
         {
-            return StatusCode(500, new ErrorResponse("Internal server error", ex.Message));
+            return BadRequest(new ErrorResponse("Invalid player move: no valid move detected"));
         }
+
+        var gameStatus = _gameService.CheckGameEnd(currentGame);
+        if (gameStatus != GameStatus.InProgress)
+        {
+            _repository.Save(currentGame);
+            return Ok(GameMapper.ToResponse(currentGame, gameStatus));
+        }
+
+        _gameService.MakeComputerMove(currentGame);
+        _repository.Save(currentGame);
+
+        var finalStatus = _gameService.CheckGameEnd(currentGame);
+        return Ok(GameMapper.ToResponse(currentGame, finalStatus));
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        if (HttpContext.Items.TryGetValue("UserId", out var userIdObj) && userIdObj is Guid id)
+        {
+            userId = id;
+            return true;
+        }
+        userId = Guid.Empty;
+        return false;
     }
 }
