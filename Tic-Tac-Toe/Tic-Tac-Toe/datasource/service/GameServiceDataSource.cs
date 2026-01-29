@@ -79,5 +79,16 @@ public class GameServiceDataSource : IGameService
         
         return move;
     }
+
+    /// Проверяет, что доска из запроса соответствует текущей доске игры (кроме нового хода игрока)
+    public bool ValidateBoardBeforeMove(Game currentGame, GameBoard newBoard)
+    {
+        if (currentGame == null || newBoard == null)
+        {
+            return false;
+        }
+
+        return _domainService.ValidateBoardBeforeMove(currentGame, newBoard);
+    }
 }
 

@@ -300,4 +300,98 @@ public class GameService : IGameService
 
         return isFull ? GameStatus.Draw : GameStatus.InProgress;
     }
+
+    /// Проверяет, что доска из запроса соответствует текущей доске игры (кроме нового хода игрока)
+    public bool ValidateBoardBeforeMove(Game currentGame, GameBoard newBoard)
+    {
+        if (currentGame == null || currentGame.Board == null || newBoard == null)
+        {
+            return false;
+        }
+
+        if (currentGame.MoveHistory == null || currentGame.MoveHistory.Count == 0)
+        {
+            int playerMovesInNew = 0;
+            int computerMovesInNew = 0;
+            int playerMovesInCurrent = 0;
+            int computerMovesInCurrent = 0;
+
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    if (newBoard[i, j] == GameBoard.PlayerX) playerMovesInNew++;
+                    if (newBoard[i, j] == GameBoard.PlayerO) computerMovesInNew++;
+                    if (currentGame.Board[i, j] == GameBoard.PlayerX) playerMovesInCurrent++;
+                    if (currentGame.Board[i, j] == GameBoard.PlayerO) computerMovesInCurrent++;
+                }
+            }
+
+            if (playerMovesInNew != playerMovesInCurrent + 1)
+            {
+                return false;
+            }
+
+            if (computerMovesInNew != computerMovesInCurrent)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    int currentValue = currentGame.Board[i, j];
+                    int newValue = newBoard[i, j];
+                    
+                    if (currentValue != GameBoard.Empty && currentValue != newValue)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        var reconstructedBoard = new GameBoard();
+        foreach (var move in currentGame.MoveHistory)
+        {
+            if (reconstructedBoard.IsEmpty(move.Row, move.Col))
+            {
+                reconstructedBoard[move.Row, move.Col] = move.Player;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        int additionalPlayerMoves = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                int reconstructedValue = reconstructedBoard[i, j];
+                int newValue = newBoard[i, j];
+                
+                if (reconstructedValue != GameBoard.Empty && reconstructedValue != newValue)
+                {
+                    return false;
+                }
+                
+                if (reconstructedValue == GameBoard.Empty && newValue == GameBoard.PlayerX)
+                {
+                    additionalPlayerMoves++;
+                }
+                
+                if (reconstructedValue == GameBoard.Empty && newValue == GameBoard.PlayerO)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return additionalPlayerMoves == 1;
+    }
 }

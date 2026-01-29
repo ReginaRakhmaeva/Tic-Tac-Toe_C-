@@ -24,4 +24,8 @@ public interface IGameService
     /// Применение хода компьютера: получает ход, применяет к доске и добавляет в историю
     /// Возвращает выполненный ход
     Move MakeComputerMove(Game game);
+
+    /// Проверяет, что доска из запроса соответствует текущей доске игры (кроме нового хода игрока)
+    /// Возвращает true, если доска валидна для обработки хода
+    bool ValidateBoardBeforeMove(Game currentGame, GameBoard newBoard);
 }
