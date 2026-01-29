@@ -22,22 +22,33 @@ public class UserRepository : IUserRepository
             throw new ArgumentNullException(nameof(user));
         }
 
-        var userDto = UserMapper.ToDto(user);
-        
-        var existingUser = _context.Users.Find(user.Id);
-        
-        if (existingUser != null)
+        try
         {
-            existingUser.Login = userDto.Login;
-            existingUser.Password = userDto.Password;
-            _context.Users.Update(existingUser);
-        }
-        else
-        {
-            _context.Users.Add(userDto);
-        }
+            var userDto = UserMapper.ToDto(user);
+            
+            var existingUser = _context.Users.Find(user.Id);
+            
+            if (existingUser != null)
+            {
+                existingUser.Login = userDto.Login;
+                existingUser.Password = userDto.Password;
+                _context.Users.Update(existingUser);
+            }
+            else
+            {
+                _context.Users.Add(userDto);
+            }
 
-        _context.SaveChanges();
+            _context.SaveChanges();
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        {
+            throw new InvalidOperationException($"Ошибка при сохранении пользователя в базу данных: {ex.InnerException?.Message ?? ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Неожиданная ошибка при сохранении пользователя: {ex.Message}", ex);
+        }
     }
 
     public User? GetById(Guid id)
@@ -59,15 +70,22 @@ public class UserRepository : IUserRepository
             throw new ArgumentException("Login cannot be null or empty", nameof(login));
         }
 
-        var userDto = _context.Users
-            .FirstOrDefault(u => u.Login == login);
-
-        if (userDto == null)
+        try
         {
-            return null;
-        }
+            var userDto = _context.Users
+                .FirstOrDefault(u => u.Login == login);
 
-        return UserMapper.ToDomain(userDto);
+            if (userDto == null)
+            {
+                return null;
+            }
+
+            return UserMapper.ToDomain(userDto);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Ошибка при получении пользователя из базы данных: {ex.Message}", ex);
+        }
     }
 
     public bool ExistsByLogin(string login)
@@ -77,6 +95,13 @@ public class UserRepository : IUserRepository
             return false;
         }
 
-        return _context.Users.Any(u => u.Login == login);
+        try
+        {
+            return _context.Users.Any(u => u.Login == login);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Ошибка при проверке существования пользователя: {ex.Message}", ex);
+        }
     }
 }
