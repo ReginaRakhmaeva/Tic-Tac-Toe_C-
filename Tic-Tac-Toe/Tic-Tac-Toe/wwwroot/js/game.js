@@ -6,27 +6,51 @@ let gameFinished = false;
 async function initializeGame(computerFirst) {
     currentGameId = generateUUID();
     gameBoard = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    isPlayerTurn = true;
+    // Если компьютер ходит первым, блокируем ходы игрока до получения ответа
+    isPlayerTurn = !computerFirst;
     gameFinished = false;
     
     document.getElementById('gameBoard').style.display = 'inline-block';
     document.getElementById('gameId').textContent = 'ID игры: ' + currentGameId;
     document.getElementById('gameId').style.display = 'block';
-    document.getElementById('gameStatus').textContent = 'Инициализация игры...';
+    
+    if (computerFirst) {
+        document.getElementById('gameStatus').textContent = 'Ход компьютера...';
+    } else {
+        document.getElementById('gameStatus').textContent = 'Ваш ход (X)';
+    }
+    
     document.getElementById('errorMessage').style.display = 'none';
     
     clearBoard();
     
     try {
         const firstMoveParam = computerFirst ? 'computer' : 'player';
-        const response = await fetch(`/Game/${currentGameId}?firstMove=${firstMoveParam}`, {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // Добавляем заголовок Authorization, если есть сохраненные credentials
+        const authCredentials = localStorage.getItem('authCredentials');
+        if (authCredentials) {
+            headers['Authorization'] = 'Basic ' + authCredentials;
+        }
+        
+        const response = await fetch(`/game/${currentGameId}?firstMove=${firstMoveParam}`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: headers
         });
         
         if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('authCredentials');
+                localStorage.removeItem('userId');
+                if (typeof updateNavigation === 'function') {
+                    updateNavigation();
+                }
+                window.location.href = '/Login';
+                return;
+            }
             throw new Error('Ошибка при инициализации игры');
         }
         
@@ -38,6 +62,8 @@ async function initializeGame(computerFirst) {
             
             handleGameStatus(gameResponse.status);
             
+            // После получения ответа от сервера (компьютер уже сходил, если нужно)
+            // разрешаем ход игрока только если игра не закончена
             if (!gameFinished) {
                 isPlayerTurn = true;
                 document.getElementById('gameStatus').textContent = 'Ваш ход (X)';
@@ -47,7 +73,14 @@ async function initializeGame(computerFirst) {
         console.error('Ошибка при инициализации игры:', error);
         document.getElementById('errorMessage').textContent = 'Ошибка: ' + error.message;
         document.getElementById('errorMessage').style.display = 'block';
-        document.getElementById('gameStatus').textContent = 'Ваш ход (X)';
+        // При ошибке разрешаем ход игрока, если игра не была начата с компьютером
+        if (!computerFirst) {
+            isPlayerTurn = true;
+            document.getElementById('gameStatus').textContent = 'Ваш ход (X)';
+        } else {
+            isPlayerTurn = false;
+            document.getElementById('gameStatus').textContent = 'Ошибка инициализации';
+        }
     }
 }
 
@@ -56,11 +89,19 @@ async function makeMove() {
         document.getElementById('gameStatus').textContent = 'Ход компьютера...';
         document.getElementById('errorMessage').style.display = 'none';
         
-        const response = await fetch(`/Game/${currentGameId}`, {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // Добавляем заголовок Authorization, если есть сохраненные credentials
+        const authCredentials = localStorage.getItem('authCredentials');
+        if (authCredentials) {
+            headers['Authorization'] = 'Basic ' + authCredentials;
+        }
+        
+        const response = await fetch(`/game/${currentGameId}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify({
                 id: currentGameId,
                 board: {
@@ -72,6 +113,15 @@ async function makeMove() {
         const responseText = await response.text();
         
         if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('authCredentials');
+                localStorage.removeItem('userId');
+                if (typeof updateNavigation === 'function') {
+                    updateNavigation();
+                }
+                window.location.href = '/Login';
+                return;
+            }
             let errorMessage = 'Ошибка сервера';
             try {
                 const error = JSON.parse(responseText);
@@ -87,6 +137,7 @@ async function makeMove() {
         console.log('Response from server:', gameResponse);
         
         if (gameResponse && gameResponse.board && gameResponse.board.board) {
+            // Обновляем доску из ответа сервера (включая ход компьютера)
             gameBoard = gameResponse.board.board;
             updateBoard();
         } else {
@@ -96,9 +147,13 @@ async function makeMove() {
         
         handleGameStatus(gameResponse.status);
         
+        // Если игра не закончена, разрешаем следующий ход игрока
         if (!gameFinished) {
             isPlayerTurn = true;
             document.getElementById('gameStatus').textContent = 'Ваш ход (X)';
+        } else {
+            // Игра закончена, блокируем ходы
+            isPlayerTurn = false;
         }
         
     } catch (error) {
@@ -172,6 +227,21 @@ function generateUUID() {
 
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
+    // Обновляем навигацию
+    if (typeof updateNavigation === 'function') {
+        updateNavigation();
+    }
+    
+    // Проверяем авторизацию
+    const authCredentials = localStorage.getItem('authCredentials');
+    if (!authCredentials) {
+        document.getElementById('authWarning').style.display = 'block';
+        document.getElementById('gameBoard').style.display = 'none';
+        document.getElementById('startFirstBtn').disabled = true;
+        document.getElementById('startSecondBtn').disabled = true;
+        return;
+    }
+    
     document.getElementById('startFirstBtn').addEventListener('click', function() {
         initializeGame(false);
     });
@@ -182,17 +252,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('.cell').forEach(cell => {
         cell.addEventListener('click', function() {
-            if (gameFinished || !isPlayerTurn || !currentGameId) return;
+            if (gameFinished || !isPlayerTurn || !currentGameId) {
+                return;
+            }
             
             const row = parseInt(this.dataset.row);
             const col = parseInt(this.dataset.col);
             
-            if (gameBoard[row][col] !== 0) return;
+            // Проверяем, что клетка пуста
+            if (gameBoard[row][col] !== 0) {
+                return;
+            }
             
+            // Проверяем, что игра не закончена
+            if (gameFinished) {
+                return;
+            }
+            
+            // Делаем ход игрока
             gameBoard[row][col] = 1;
             updateBoard();
             
+            // Блокируем дальнейшие ходы до ответа сервера
             isPlayerTurn = false;
+            document.getElementById('gameStatus').textContent = 'Ожидание ответа сервера...';
+            
             makeMove();
         });
     });

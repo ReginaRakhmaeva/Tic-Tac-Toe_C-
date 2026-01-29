@@ -6,10 +6,27 @@
     <title>@ViewData["Title"] - Tic_Tac_Toe</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/Tic_Tac_Toe.styles.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">Крестики-Нолики</a>
+            <div class="navbar-nav ms-auto">
+                <div id="userInfo" class="nav-item dropdown" style="display: none;">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span id="userLogin">Пользователь</span>
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                        <li><a class="dropdown-item" href="#" id="logoutBtn">Выйти</a></li>
+                    </ul>
+                </div>
+                <div id="loginLink" class="nav-item" style="display: none;">
+                    <a class="nav-link" href="/Login">Войти</a>
+                </div>
+            </div>
+        </div>
+    </nav>
     <div class="container">
         <main role="main" class="pb-3">
             @RenderBody()

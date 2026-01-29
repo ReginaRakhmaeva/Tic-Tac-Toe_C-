@@ -1,0 +1,160 @@
+@page
+@model LoginModel
+@{
+    ViewData["Title"] = "Вход";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title text-center mb-4" id="pageTitle">Вход</h2>
+                    
+                    <!-- Форма входа -->
+                    <div id="loginForm">
+                        <div class="mb-3">
+                            <label for="loginUsername" class="form-label">Логин</label>
+                            <input type="text" class="form-control" id="loginUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="loginPassword" class="form-label">Пароль</label>
+                            <input type="password" class="form-control" id="loginPassword" required>
+                        </div>
+                        <button type="button" class="btn btn-success w-100 mb-3" onclick="login()">Войти</button>
+                        <p class="text-center text-muted small">
+                            Нет аккаунта? 
+                            <a href="#" onclick="showRegisterForm(); return false;">Зарегистрироваться</a>
+                        </p>
+                    </div>
+
+                    <!-- Форма регистрации -->
+                    <div id="registerForm" style="display: none;">
+                        <div class="mb-3">
+                            <label for="registerLogin" class="form-label">Логин</label>
+                            <input type="text" class="form-control" id="registerLogin" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="registerPassword" class="form-label">Пароль</label>
+                            <input type="password" class="form-control" id="registerPassword" required>
+                        </div>
+                        <button type="button" class="btn btn-primary w-100 mb-3" onclick="register()">Зарегистрироваться</button>
+                        <p class="text-center text-muted small">
+                            Уже есть аккаунт? 
+                            <a href="#" onclick="showLoginForm(); return false;">Войти</a>
+                        </p>
+                    </div>
+
+                    <div id="message" class="alert mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function showLoginForm() {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('pageTitle').textContent = 'Вход';
+            hideMessage();
+        }
+
+        function showRegisterForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('pageTitle').textContent = 'Регистрация';
+            hideMessage();
+        }
+
+        function hideMessage() {
+            const messageDiv = document.getElementById('message');
+            messageDiv.style.display = 'none';
+            messageDiv.className = 'alert mt-3';
+        }
+
+        function showMessage(text, isSuccess) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = 'alert mt-3 ' + (isSuccess ? 'alert-success' : 'alert-danger');
+            messageDiv.style.display = 'block';
+        }
+
+        async function register() {
+            const login = document.getElementById('registerLogin').value;
+            const password = document.getElementById('registerPassword').value;
+
+            if (!login || !password) {
+                showMessage('Заполните все поля', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ login, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('Регистрация успешна! Теперь вы можете войти.', true);
+                    setTimeout(() => {
+                        showLoginForm();
+                        document.getElementById('loginUsername').value = login;
+                    }, 1500);
+                } else {
+                    showMessage(data.message || 'Ошибка регистрации', false);
+                }
+            } catch (error) {
+                showMessage('Ошибка соединения: ' + error.message, false);
+            }
+        }
+
+        async function login() {
+            const login = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!login || !password) {
+                showMessage('Заполните все поля', false);
+                return;
+            }
+
+            try {
+                // Создаем base64 строку для Basic Auth
+                const credentials = btoa(login + ':' + password);
+
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Basic ' + credentials
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('authCredentials', credentials);
+                    localStorage.setItem('userId', data.userId);
+                    
+                    if (typeof updateNavigation === 'function') {
+                        updateNavigation();
+                    }
+                    
+                    showMessage('Вход выполнен успешно! Перенаправление...', true);
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showMessage(data.message || 'Неверный логин или пароль', false);
+                }
+            } catch (error) {
+                showMessage('Ошибка соединения: ' + error.message, false);
+            }
+        }
+    </script>
+}

@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model IndexModel
 @{
     ViewData["Title"] = "Tic-Tac-Toe Game";
@@ -10,6 +10,10 @@
 
 <div class="container text-center">
     <h1 class="display-4 mb-4">Крестики-Нолики</h1>
+    
+    <div id="authWarning" class="alert alert-warning mb-3" style="display: none;">
+        <p>Для игры необходимо <a href="/Login">войти в систему</a></p>
+    </div>
     
     <div class="game-container">
         <div class="game-info mb-3">
