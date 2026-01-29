@@ -7,6 +7,9 @@ public class Game
     /// Уникальный идентификатор игры (UUID)
     public Guid Id { get; set; }
 
+    /// Идентификатор пользователя, владельца игры
+    public Guid UserId { get; set; }
+
     /// Игровое поле
     public GameBoard Board { get; set; }
 
@@ -16,6 +19,7 @@ public class Game
     public Game()
     {
         Id = Guid.NewGuid();
+        UserId = Guid.Empty;
         Board = new GameBoard();
         MoveHistory = new List<Move>();
     }
@@ -23,6 +27,15 @@ public class Game
     public Game(Guid id, GameBoard board)
     {
         Id = id;
+        UserId = Guid.Empty;
+        Board = board ?? new GameBoard();
+        MoveHistory = new List<Move>();
+    }
+
+    public Game(Guid id, Guid userId, GameBoard board)
+    {
+        Id = id;
+        UserId = userId;
         Board = board ?? new GameBoard();
         MoveHistory = new List<Move>();
     }

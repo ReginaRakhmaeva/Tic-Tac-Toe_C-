@@ -12,6 +12,11 @@ public class GameDto
     [Column("id")]
     public Guid Id { get; set; }
 
+    /// Идентификатор пользователя, владельца игры
+    [Required]
+    [Column("user_id")]
+    public Guid UserId { get; set; }
+
     /// Игровое поле
     [Required]
     [Column("board", TypeName = "jsonb")]
@@ -24,14 +29,8 @@ public class GameDto
     public GameDto()
     {
         Id = Guid.NewGuid();
+        UserId = Guid.Empty;
         Board = new GameBoardDto();
-        MoveHistory = new List<MoveDto>();
-    }
-
-    public GameDto(Guid id, GameBoardDto board)
-    {
-        Id = id;
-        Board = board ?? new GameBoardDto();
         MoveHistory = new List<MoveDto>();
     }
 }

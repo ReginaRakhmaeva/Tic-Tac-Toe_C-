@@ -17,6 +17,7 @@ public static class GameMapper
         var dto = new GameDto
         {
             Id = domain.Id,
+            UserId = domain.UserId,
             Board = GameBoardMapper.ToDto(domain.Board),
             MoveHistory = domain.MoveHistory?.Select(m => MoveMapper.ToDto(m)).ToList() ?? new List<MoveDto>()
         };
@@ -35,6 +36,7 @@ public static class GameMapper
         var domain = new Game
         {
             Id = dto.Id,
+            UserId = dto.UserId,
             Board = GameBoardMapper.ToDomain(dto.Board),
             MoveHistory = dto.MoveHistory?.Select(m => MoveMapper.ToDomain(m)).ToList() ?? new List<Move>()
         };
