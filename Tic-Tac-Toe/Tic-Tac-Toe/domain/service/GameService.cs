@@ -2,12 +2,10 @@ using Tic_Tac_Toe.domain.model;
 
 namespace Tic_Tac_Toe.domain.service;
 
-
 /// Реализация сервиса для работы с игрой
 public class GameService : IGameService
 {
     
-    /// Получение следующего хода текущей игры алгоритмом Минимакс
     public Move GetNextMove(Game game)
     {
         if (game == null || game.Board == null)
@@ -15,17 +13,14 @@ public class GameService : IGameService
             throw new ArgumentNullException(nameof(game));
         }
 
-        // Определяем, за кого играет компьютер (обычно O)
         int computerPlayer = GameBoard.PlayerO;
         int humanPlayer = GameBoard.PlayerX;
 
-        // Находим лучший ход с помощью алгоритма Минимакс
         var bestMove = Minimax(game.Board, computerPlayer, humanPlayer);
         return bestMove;
     }
 
     
-    /// Алгоритм Минимакс для поиска оптимального хода
     private Move Minimax(GameBoard board, int maximizingPlayer, int minimizingPlayer)
     {
         int bestScore = int.MinValue;
@@ -51,14 +46,12 @@ public class GameService : IGameService
                     }
                     else if (score == bestScore)
                     {
-                        // Если оценка равна лучшей, добавляем в список для случайного выбора
                         bestMoves.Add(new Move(i, j, maximizingPlayer));
                     }
                 }
             }
         }
 
-        // Если есть несколько ходов с одинаковой оценкой, выбираем случайный
         if (bestMoves.Count > 0)
         {
             Random random = new Random();
@@ -130,7 +123,6 @@ public class GameService : IGameService
     }
 
     
-    /// Валидация игрового поля текущей игры (проверка, что не изменены предыдущие ходы)
     public bool ValidateBoard(Game game)
     {
         if (game == null || game.Board == null)
@@ -171,7 +163,6 @@ public class GameService : IGameService
     }
 
     
-    /// Проверка валидности значений на поле
     private bool IsBoardValid(GameBoard board)
     {
         for (int i = 0; i < 3; i++)
@@ -189,7 +180,6 @@ public class GameService : IGameService
     }
 
     
-    /// Проверка окончания игры
     public GameStatus CheckGameEnd(Game game)
     {
         if (game == null || game.Board == null)
@@ -197,10 +187,45 @@ public class GameService : IGameService
             throw new ArgumentNullException(nameof(game));
         }
 
-        return EvaluateBoard(game.Board);
+        var boardStatus = EvaluateBoard(game.Board);
+
+        bool isTwoPlayerGame = game.GameType == GameType.TwoPlayer;
+
+        if (boardStatus == GameStatus.PlayerXWins)
+        {
+            if (isTwoPlayerGame)
+            {
+                game.WinnerId = game.Player1Id;
+            }
+            else
+            {
+                game.WinnerId = game.Player1Id;
+            }
+            return GameStatus.PlayerWins;
+        }
+        else if (boardStatus == GameStatus.PlayerOWins)
+        {
+            if (isTwoPlayerGame)
+            {
+                game.WinnerId = game.Player2Id;
+            }
+            else
+            {
+                game.WinnerId = game.Player2Id ?? GameConstants.ComputerId;
+            }
+            return GameStatus.PlayerWins;
+        }
+        else if (boardStatus == GameStatus.Draw)
+        {
+            game.WinnerId = null;
+            return GameStatus.Draw;
+        }
+        else
+        {
+            return GameStatus.PlayerTurn;
+        }
     }
 
-    /// Обработка хода игрока: обновляет доску, определяет ход и добавляет в историю
     public bool ProcessPlayerMove(Game game, GameBoard newBoard)
     {
         if (game == null || game.Board == null || newBoard == null)
@@ -208,30 +233,63 @@ public class GameService : IGameService
             return false;
         }
 
-        GameBoard oldBoard = game.Board.Clone();
-        game.Board = newBoard;
+        int correctPlayerSymbol = GameBoard.PlayerX;
+        bool isTwoPlayerGame = game.GameType == GameType.TwoPlayer;
+        
+        if (isTwoPlayerGame && game.CurrentPlayerId != null)
+        {
+            if (game.CurrentPlayerId == game.Player2Id)
+            {
+                correctPlayerSymbol = GameBoard.PlayerO;
+            }
+            else
+            {
+                correctPlayerSymbol = GameBoard.PlayerX;
+            }
+        }
+        else
+        {
+            correctPlayerSymbol = GameBoard.PlayerX;
+        }
 
-        // Определяем ход игрока, сравнивая старую и новую доску
+        GameBoard oldBoard = game.Board.Clone();
+        
+        int moveRow = -1;
+        int moveCol = -1;
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
-                if (oldBoard[i, j] != game.Board[i, j] && game.Board[i, j] == GameBoard.PlayerX)
+                if (oldBoard[i, j] != newBoard[i, j])
                 {
-                    if (game.MoveHistory == null)
+                    if (oldBoard[i, j] == GameBoard.Empty && newBoard[i, j] != GameBoard.Empty)
                     {
-                        game.MoveHistory = new List<Move>();
+                        moveRow = i;
+                        moveCol = j;
+                        break;
                     }
-                    game.MoveHistory.Add(new Move(i, j, GameBoard.PlayerX));
-                    return true;
                 }
             }
+            if (moveRow >= 0) break;
         }
 
-        return false;
+        if (moveRow < 0 || moveCol < 0)
+        {
+            return false;
+        }
+
+        game.Board = oldBoard.Clone();
+        game.Board[moveRow, moveCol] = correctPlayerSymbol;
+
+        if (game.MoveHistory == null)
+        {
+            game.MoveHistory = new List<Move>();
+        }
+        game.MoveHistory.Add(new Move(moveRow, moveCol, correctPlayerSymbol));
+        
+        return true;
     }
 
-    /// Применение хода компьютера: получает ход, применяет к доске и добавляет в историю
     public Move MakeComputerMove(Game game)
     {
         if (game == null || game.Board == null)
@@ -241,10 +299,8 @@ public class GameService : IGameService
 
         Move computerMove = GetNextMove(game);
         
-        // Применяем ход к доске
         game.Board[computerMove.Row, computerMove.Col] = GameBoard.PlayerO;
         
-        // Добавляем в историю
         if (game.MoveHistory == null)
         {
             game.MoveHistory = new List<Move>();
@@ -255,7 +311,6 @@ public class GameService : IGameService
     }
 
     
-    /// Оценка состояния игрового поля
     private GameStatus EvaluateBoard(GameBoard board)
     {
         for (int i = 0; i < 3; i++)
@@ -299,5 +354,79 @@ public class GameService : IGameService
         }
 
         return isFull ? GameStatus.Draw : GameStatus.InProgress;
+    }
+
+    public bool ValidateBoardBeforeMove(Game currentGame, GameBoard newBoard)
+    {
+        if (currentGame == null || currentGame.Board == null || newBoard == null)
+        {
+            return false;
+        }
+
+        if (currentGame.MoveHistory != null && currentGame.MoveHistory.Count > 0)
+        {
+            var reconstructedBoard = new GameBoard();
+            foreach (var move in currentGame.MoveHistory)
+            {
+                if (reconstructedBoard.IsEmpty(move.Row, move.Col))
+                {
+                    reconstructedBoard[move.Row, move.Col] = move.Player;
+                }
+                else
+                {
+                    return false; 
+                }
+            }
+
+            int changesCount = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    int reconstructedValue = reconstructedBoard[i, j];
+                    int newValue = newBoard[i, j];
+                    
+                    if (reconstructedValue != newValue)
+                    {
+                        if (reconstructedValue == GameBoard.Empty && newValue != GameBoard.Empty)
+                        {
+                            changesCount++;
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return changesCount == 1;
+        }
+        else
+        {
+            int changesCount = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    int currentValue = currentGame.Board[i, j];
+                    int newValue = newBoard[i, j];
+                    
+                    if (currentValue != newValue)
+                    {
+                        if (currentValue == GameBoard.Empty && newValue != GameBoard.Empty)
+                        {
+                            changesCount++;
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return changesCount == 1 || changesCount == 0;
+        }
     }
 }

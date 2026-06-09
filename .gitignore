@@ -337,3 +337,5 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+/Tic-Tac-Toe/Tic-Tac-Toe/appsettings.json
+/Tic-Tac-Toe/Tic-Tac-Toe/appsettings.Development.json

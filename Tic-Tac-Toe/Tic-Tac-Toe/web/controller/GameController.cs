@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Tic_Tac_Toe.domain.model;
-using Tic_Tac_Toe.domain.service;
-using Tic_Tac_Toe.datasource.repository;
+using Tic_Tac_Toe.datasource.service;
 using Tic_Tac_Toe.web.model;
 using Tic_Tac_Toe.web.mapper;
+using Tic_Tac_Toe.web.middleware;
+using Tic_Tac_Toe.domain.service;
+using System.Linq;
 
 namespace Tic_Tac_Toe.web.controller;
 
@@ -12,110 +14,506 @@ namespace Tic_Tac_Toe.web.controller;
 [Route("game")]
 public class GameController : ControllerBase
 {
-    private readonly IGameService _gameService;
-    private readonly IGameRepository _repository;
+    private readonly IGameServiceDataSource _gameService;
+    private readonly IUserService _userService;
 
-    public GameController(IGameService gameService, IGameRepository repository)
+    public GameController(IGameServiceDataSource gameService, IUserService userService)
     {
         _gameService = gameService ?? throw new ArgumentNullException(nameof(gameService));
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _userService = userService ?? throw new ArgumentNullException(nameof(userService));
     }
 
-    [HttpGet("{id}")]
-    public IActionResult GetGame(Guid id, [FromQuery] string firstMove = "player")
+    /// Получение доступных игр (ожидающих второго игрока)
+    [HttpGet("available")]
+    public IActionResult GetAvailableGames()
     {
-        try
+        if (!TryGetUserId(out var userId))
         {
-            var currentGame = _repository.Get(id);
-            
-            if (currentGame == null)
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var availableGames = _gameService.GetAvailableGames();
+        
+        var gamesForUser = availableGames
+            .Where(g => g.Player1Id != userId)
+            .ToList();
+
+        var responses = gamesForUser.Select(game =>
+        {
+            var gameStatus = GameStatus.WaitingForPlayers;
+            return GameMapper.ToResponse(game, gameStatus);
+        }).ToList();
+
+        return Ok(responses);
+    }
+
+    /// Присоединение пользователя к игре
+    [HttpPost("{id}/join")]
+    public IActionResult JoinGame(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var game = _gameService.GetGame(id);
+        
+        if (game == null)
+        {
+            return NotFound(new ErrorResponse("Game not found"));
+        }
+
+        if (game.Player1Id == null)
+        {
+            return BadRequest(new ErrorResponse("Game is not available for joining"));
+        }
+
+        if (game.Player2Id != null)
+        {
+            return BadRequest(new ErrorResponse("Game already has two players"));
+        }
+
+        if (game.Player1Id == userId)
+        {
+            return BadRequest(new ErrorResponse("Cannot join your own game"));
+        }
+
+        game.Player2Id = userId;
+        game.CurrentPlayerId = game.Player1Id;
+
+        _gameService.SaveGame(game);
+
+        var gameStatus = GameStatus.PlayerTurn;
+        var response = GameMapper.ToResponse(game, gameStatus);
+        return Ok(response);
+    }
+
+    /// Получение игры по ID
+    [HttpGet("{id}")]
+    public IActionResult GetGame(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var currentGame = _gameService.GetGame(id);
+        
+        if (currentGame == null)
+        {
+            return NotFound(new ErrorResponse("Game not found"));
+        }
+
+        bool hasAccess = currentGame.UserId == userId ||
+                        currentGame.Player1Id == userId ||
+                        currentGame.Player2Id == userId;
+        
+        if (!hasAccess)
+        {
+            return Forbid();
+        }
+        
+        GameStatus gameStatus;
+        
+        bool hasPlayerLeft = currentGame.GameType == GameType.TwoPlayer && 
+                            (currentGame.Player1Id == null || currentGame.Player2Id == null) &&
+                            (currentGame.MoveHistory != null && currentGame.MoveHistory.Count > 0);
+        
+        if (hasPlayerLeft)
+        {
+            gameStatus = GameStatus.PlayerLeft;
+        }
+        else if (currentGame.GameType == GameType.TwoPlayer && currentGame.Player2Id == null)
+        {
+            gameStatus = GameStatus.WaitingForPlayers;
+        }
+        else
+        {
+            gameStatus = _gameService.CheckGameEnd(currentGame);
+        }
+        
+        var response = GameMapper.ToResponse(currentGame, gameStatus);
+        return Ok(response);
+    }
+
+    /// Создание новой игры
+    [HttpPost]
+    public IActionResult CreateGame([FromBody] CreateGameRequest request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        if (request == null)
+        {
+            return BadRequest(new ErrorResponse("Request body is required"));
+        }
+
+        var gameType = request.GameType?.ToLower() ?? "computer";
+        
+        if (gameType == "player")
+        {
+            _gameService.DeleteInactiveGamesByPlayer1Id(userId);
+        }
+        
+        var gameId = Guid.NewGuid();
+        Game newGame;
+
+        if (gameType == "player")
+        {
+            if (request.Player2Id.HasValue)
             {
-                bool computerFirst = (firstMove?.ToLower() == "computer");
-                
-                currentGame = new Game { Id = id };
-                
-                if (computerFirst)
+                if (request.Player2Id.Value == userId)
                 {
-                    _gameService.MakeComputerMove(currentGame);
-                    _repository.Save(currentGame);
+                    return BadRequest(new ErrorResponse("Cannot create game with yourself"));
                 }
-                else
+
+                newGame = new Game
                 {
-                    _repository.Save(currentGame);
+                    Id = gameId,
+                    UserId = userId,
+                    GameType = GameType.TwoPlayer,
+                    Player1Id = userId,
+                    Player2Id = request.Player2Id.Value,
+                    CurrentPlayerId = userId,
+                    Board = new GameBoard(),
+                    MoveHistory = new List<Move>()
+                };
+
+                var gameStatus = GameStatus.PlayerTurn;
+                _gameService.SaveGame(newGame);
+                var response = GameMapper.ToResponse(newGame, gameStatus);
+                return CreatedAtAction(nameof(GetGame), new { id = gameId }, response);
+            }
+            else
+            {
+                newGame = new Game
+                {
+                    Id = gameId,
+                    UserId = userId,
+                    GameType = GameType.TwoPlayer,
+                    Player1Id = userId,
+                    Player2Id = null,
+                    CurrentPlayerId = null,
+                    Board = new GameBoard(),
+                    MoveHistory = new List<Move>()
+                };
+
+                var gameStatus = GameStatus.WaitingForPlayers;
+                _gameService.SaveGame(newGame);
+                var response = GameMapper.ToResponse(newGame, gameStatus);
+                return CreatedAtAction(nameof(GetGame), new { id = gameId }, response);
+            }
+        }
+        else
+        {
+            bool computerFirst = (request.FirstMove?.ToLower() == "computer");
+            newGame = new Game
+            {
+                Id = gameId,
+                UserId = userId,
+                GameType = GameType.Computer,
+                Player1Id = userId,
+                Player2Id = GameConstants.ComputerId,
+                Board = new GameBoard(),
+                MoveHistory = new List<Move>()
+            };
+
+            if (computerFirst)
+            {
+                _gameService.MakeComputerMove(newGame);
+            }
+
+            var gameStatus = _gameService.CheckGameEnd(newGame);
+            
+            _gameService.SaveGame(newGame);
+            
+            var response = GameMapper.ToResponse(newGame, gameStatus);
+            return CreatedAtAction(nameof(GetGame), new { id = gameId }, response);
+        }
+    }
+
+    /// Выход из игры (удаление игры, если она еще не началась)
+    [HttpPost("{id}/leave")]
+    public IActionResult LeaveGame(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var game = _gameService.GetGame(id);
+        
+        if (game == null)
+        {
+            return NotFound(new ErrorResponse("Game not found"));
+        }
+
+        bool isParticipant = game.UserId == userId || 
+                           game.Player1Id == userId || 
+                           game.Player2Id == userId;
+        
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+
+        bool isGameFinished = game.WinnerId != null || 
+                             (game.MoveHistory != null && game.MoveHistory.Count >= 9);
+        
+        if (isGameFinished)
+        {
+            return Ok(new { message = "Left the completed game" });
+        }
+
+        _gameService.DeleteGame(id);
+        return Ok(new { message = "Game deleted successfully" });
+    }
+
+    /// Удаление игры (только для создателя, если игра еще не началась)
+    [HttpDelete("{id}")]
+    public IActionResult DeleteGame(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var game = _gameService.GetGame(id);
+        
+        if (game == null)
+        {
+            return NotFound(new ErrorResponse("Game not found"));
+        }
+
+        if (game.UserId != userId && game.Player1Id != userId)
+        {
+            return Forbid();
+        }
+
+        bool canDelete = game.Player2Id == null && 
+                        (game.MoveHistory == null || game.MoveHistory.Count == 0);
+
+        if (!canDelete)
+        {
+            return BadRequest(new ErrorResponse("Cannot delete game that has already started"));
+        }
+
+        _gameService.DeleteGame(id);
+        return NoContent();
+    }
+
+    [HttpGet("history")]
+    public IActionResult GetCompletedGamesHistory()
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        var games = _gameService.GetCompletedGamesByUserId(userId);
+
+        var responses = games.Select(game =>
+        {
+            GameStatus status;
+            if (game.WinnerId == null)
+            {
+                status = GameStatus.Draw;
+            }
+            else if (game.WinnerId == userId)
+            {
+                status = GameStatus.PlayerWins;
+            }
+            else
+            {
+                status = GameStatus.PlayerWins; 
+            }
+            
+            var response = GameMapper.ToResponse(game, status);
+            
+            // Получаем логины игроков
+            if (game.Player1Id.HasValue && !GameConstants.IsComputer(game.Player1Id))
+            {
+                var player1 = _userService.GetUserById(game.Player1Id.Value);
+                if (player1 != null)
+                {
+                    response.Player1Login = player1.Login;
                 }
             }
             
-            var gameStatus = _gameService.CheckGameEnd(currentGame);
-            var response = GameMapper.ToResponse(currentGame, gameStatus);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new ErrorResponse("Internal server error", ex.Message));
-        }
+            if (game.Player2Id.HasValue && !GameConstants.IsComputer(game.Player2Id))
+            {
+                var player2 = _userService.GetUserById(game.Player2Id.Value);
+                if (player2 != null)
+                {
+                    response.Player2Login = player2.Login;
+                }
+            }
+            
+            return response;
+        }).ToList();
+
+        return Ok(responses);
     }
 
     [HttpPost("{id}")]
     public IActionResult MakeMove(Guid id, [FromBody] GameRequest request)
     {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        if (request == null)
+        {
+            return BadRequest(new ErrorResponse("Request body is required"));
+        }
+
+        if (request.Id != id)
+        {
+            return BadRequest(new ErrorResponse("Game ID in URL does not match ID in request body"));
+        }
+
+        if (request.Board == null)
+        {
+            return BadRequest(new ErrorResponse("Board is required"));
+        }
+
+        Game gameFromRequest;
         try
         {
-            if (request == null)
+            gameFromRequest = GameMapper.ToDomain(request);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse("Invalid game data", ex.Message));
+        }
+
+        var currentGame = _gameService.GetGame(id);
+        
+        if (currentGame == null)
+        {
+            return NotFound(new ErrorResponse("Game not found"));
+        }
+
+        bool hasAccess = currentGame.UserId == userId ||
+                        currentGame.Player1Id == userId ||
+                        currentGame.Player2Id == userId;
+        
+        if (!hasAccess)
+        {
+            return Forbid();
+        }
+
+        bool isTwoPlayerGame = currentGame.GameType == GameType.TwoPlayer;
+        if (isTwoPlayerGame)
+        {
+            if (currentGame.Player1Id == null || currentGame.Player2Id == null)
             {
-                return BadRequest(new ErrorResponse("Request body is required"));
+                return BadRequest(new ErrorResponse("Your opponent has left the game"));
+            }
+            
+            if (currentGame.CurrentPlayerId != userId)
+            {
+                return BadRequest(new ErrorResponse("It's not your turn"));
+            }
+        }
+
+        if (!_gameService.ValidateBoardBeforeMove(currentGame, gameFromRequest.Board))
+        {
+            return BadRequest(new ErrorResponse("Invalid game board: previous moves have been changed"));
+        }
+
+        if (!_gameService.ProcessPlayerMove(currentGame, gameFromRequest.Board))
+        {
+            return BadRequest(new ErrorResponse("Invalid player move: no valid move detected"));
+        }
+
+        var gameStatus = _gameService.CheckGameEnd(currentGame);
+        
+        bool isGameFinished = gameStatus == GameStatus.PlayerWins || 
+                             gameStatus == GameStatus.Draw;
+        
+        if (isGameFinished)
+        {
+            _gameService.SaveGame(currentGame);
+            return Ok(GameMapper.ToResponse(currentGame, gameStatus));
+        }
+
+        if (isTwoPlayerGame)
+        {
+            if (currentGame.CurrentPlayerId == currentGame.Player1Id)
+            {
+                currentGame.CurrentPlayerId = currentGame.Player2Id;
+            }
+            else
+            {
+                currentGame.CurrentPlayerId = currentGame.Player1Id;
             }
 
-            if (request.Id != id)
-            {
-                return BadRequest(new ErrorResponse("Game ID in URL does not match ID in request body"));
-            }
-
-            if (request.Board == null)
-            {
-                return BadRequest(new ErrorResponse("Board is required"));
-            }
-
-            Game gameFromRequest;
-            try
-            {
-                gameFromRequest = GameMapper.ToDomain(request);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new ErrorResponse("Invalid game data", ex.Message));
-            }
-
-            Game currentGame = _repository.Get(id) ?? new Game { Id = id };
-
-            if (!_gameService.ProcessPlayerMove(currentGame, gameFromRequest.Board))
-            {
-                return BadRequest(new ErrorResponse("Invalid player move: no valid move detected"));
-            }
-
-            if (!_gameService.ValidateBoard(currentGame))
-            {
-                return BadRequest(new ErrorResponse("Invalid game board: previous moves have been changed"));
-            }
-
-            var gameStatus = _gameService.CheckGameEnd(currentGame);
-            if (gameStatus != GameStatus.InProgress)
-            {
-                _repository.Save(currentGame);
-                var gameResponse = GameMapper.ToResponse(currentGame, gameStatus);
-                return Ok(gameResponse);
-            }
-
+            _gameService.SaveGame(currentGame);
+            return Ok(GameMapper.ToResponse(currentGame, gameStatus));
+        }
+        else
+        {
             _gameService.MakeComputerMove(currentGame);
-            _repository.Save(currentGame);
-
+            
             var finalStatus = _gameService.CheckGameEnd(currentGame);
-            var finalResponse = GameMapper.ToResponse(currentGame, finalStatus);
 
-            return Ok(finalResponse);
+            _gameService.SaveGame(currentGame);
+            
+            return Ok(GameMapper.ToResponse(currentGame, finalStatus));
+        }
+    }
+
+    /// Получение первых N лучших игроков по соотношению побед
+    [UserAuthenticator]
+    [HttpGet("leaderboard")]
+    public IActionResult GetLeaderboard([FromQuery] int topN = 10)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ErrorResponse("User ID not found in authorization context"));
+        }
+
+        if (topN <= 0)
+        {
+            return BadRequest(new ErrorResponse("topN must be greater than 0"));
+        }
+
+        if (topN > 100)
+        {
+            return BadRequest(new ErrorResponse("topN cannot exceed 100"));
+        }
+
+        try
+        {
+            var topPlayers = _gameService.GetTopPlayers(topN);
+            var responses = topPlayers.Select(LeaderboardMapper.ToResponse).ToList();
+            return Ok(responses);
         }
         catch (Exception ex)
         {
             return StatusCode(500, new ErrorResponse("Internal server error", ex.Message));
         }
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        if (HttpContext.User is UserIdPrincipal userPrincipal)
+        {
+            userId = userPrincipal.UserId;
+            return true;
+        }
+
+        if (HttpContext.Items.TryGetValue("UserId", out var userIdObj) && userIdObj is Guid id)
+        {
+            userId = id;
+            return true;
+        }
+
+        userId = Guid.Empty;
+        return false;
     }
 }

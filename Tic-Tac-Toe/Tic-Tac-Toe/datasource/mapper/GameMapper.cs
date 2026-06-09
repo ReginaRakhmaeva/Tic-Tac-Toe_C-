@@ -3,10 +3,8 @@ using Tic_Tac_Toe.datasource.model;
 
 namespace Tic_Tac_Toe.datasource.mapper;
 
-/// Маппер для преобразования Game между domain и datasource слоями
 public static class GameMapper
 {
-    /// Преобразование из domain в datasource
     public static GameDto ToDto(Game domain)
     {
         if (domain == null)
@@ -17,14 +15,20 @@ public static class GameMapper
         var dto = new GameDto
         {
             Id = domain.Id,
+            UserId = domain.UserId,
+            GameType = (int)domain.GameType,
+            Player1Id = domain.Player1Id,
+            Player2Id = domain.Player2Id,
+            CurrentPlayerId = domain.CurrentPlayerId,
+            WinnerId = domain.WinnerId,
+            CreatedAt = domain.CreatedAt,
             Board = GameBoardMapper.ToDto(domain.Board),
-            MoveHistory = domain.MoveHistory?.Select(m => MoveMapper.ToDto(m)).ToList() ?? new List<MoveDto>()
+            Moves = domain.MoveHistory?.Select(m => MoveMapper.ToDto(m, domain.Id)).ToList() ?? new List<MoveDto>()
         };
 
         return dto;
     }
 
-    /// Преобразование из datasource в domain
     public static Game ToDomain(GameDto dto)
     {
         if (dto == null)
@@ -35,10 +39,16 @@ public static class GameMapper
         var domain = new Game
         {
             Id = dto.Id,
+            UserId = dto.UserId,
+            GameType = (GameType)dto.GameType,
+            Player1Id = dto.Player1Id,
+            Player2Id = dto.Player2Id,
+            CurrentPlayerId = dto.CurrentPlayerId,
+            WinnerId = dto.WinnerId,
+            CreatedAt = dto.CreatedAt,
             Board = GameBoardMapper.ToDomain(dto.Board),
-            MoveHistory = dto.MoveHistory?.Select(m => MoveMapper.ToDomain(m)).ToList() ?? new List<Move>()
+            MoveHistory = dto.Moves?.Select(m => MoveMapper.ToDomain(m)).ToList() ?? new List<Move>()
         };
-
         return domain;
     }
 }
